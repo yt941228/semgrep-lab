@@ -1,0 +1,92 @@
+rules:
+  # 1. 动态代码执行
+  - id: python.dangerous-dynamic-execution
+    message: |
+      Detected eval(), exec(), or compile(). If input is untrusted, this can lead to code injection.
+      Fix: Avoid dynamic execution. Use ast.literal_eval() for literals or redesign logic.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+          - pattern: compile(...)
+
+  # 2. 命令注入风险（subprocess shell=True）
+  - id: python.command-injection.shell-true
+    message: |
+      subprocess call with shell=True may cause command injection if input is untrusted.
+      Fix: Use shell=False (default) and pass arguments as a list.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern: subprocess.$FUNC(..., shell=True, ...)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: ^(run|call|check_output|Popen)$
+
+  # 3. 不安全的反序列化（pickle）
+  - id: python.unsafe-pickle
+    message: |
+      Using pickle.loads() on untrusted data can execute arbitrary code.
+      Fix: Use safe formats like JSON. If necessary, sign and verify data before unpickling.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads(...)
+          - pattern: pickle.load(...)
+
+  # 4. 弱加密哈希（MD5 / SHA1）
+  - id: python.weak-crypto-hash
+    message: |
+      MD5 or SHA1 are cryptographically broken and not suitable for security purposes.
+      Fix: Use hashlib.sha256 or stronger.
+    severity: WARNING
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+
+  # 5. 硬编码密码/密钥（简单字符串匹配）
+  - id: python.hardcoded-secret
+    message: |
+      Hardcoded password or secret found in source code.
+      Fix: Use environment variables or a secrets manager.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: password = "..."
+          - pattern: secret = "..."
+          - pattern: api_key = "..."
+          - pattern: token = "..."
+      - pattern-not: password = ""   # 空字符串忽略
+      - pattern-not: secret = ""
+
+  # 6. 使用 assert 语句进行安全检查（可能在优化模式下失效）
+  - id: python.assert-used-for-security
+    message: |
+      assert statements are removed when Python runs with -O (optimize) flag.
+      Do not rely on assert for access control or security checks.
+      Fix: Use proper if/else and raise exceptions.
+    severity: WARNING
+    languages: [python]
+    pattern: assert $COND, $MSG
+
+  # 7. 从不可信路径读取文件（路径穿越风险）
+  - id: python.path-traversal.open
+    message: |
+      Opening file with user-supplied path may cause path traversal.
+      Fix: Sanitize input, use os.path.basename, or restrict to a safe directory.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern: open($PATH, ...)
+      - pattern: open($PATH)
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: .*          # 实际上任何变量都报警，因为无法静态判断来源，此处作为示例
+      - pattern-not: open("...")   # 排除硬编码字符串路径
+      - pattern-not: open('...')
